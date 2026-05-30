@@ -1,15 +1,15 @@
--- Mozer Mob v2.1 (Optimized for Mobile/Delta)
+-- Mozer Mob v2 - Professional Mob Controller
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
--- Variables
+-- Variables لجلب البيانات وحفظها
 local SavedLocation = nil
 local SelectedMobName = ""
 local BringingMobs = false
-local SelectionEnabled = false -- وضع الاختيار (OFF افتراضياً)
+local SelectionMode = false
 
 -- UI Setup
 local ScreenGui = Instance.new("ScreenGui")
@@ -17,7 +17,7 @@ ScreenGui.Name = "MozerMob_v2"
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 
--- [1] Welcome Screen
+-- [1] Welcome Screen (كما طلبت)
 local function ShowWelcome()
     local WelcomeGui = Instance.new("ScreenGui", game.CoreGui)
     local MozerLabel = Instance.new("TextLabel", WelcomeGui)
@@ -68,7 +68,7 @@ Title.TextSize = 18
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.BackgroundTransparency = 1
 
--- User Profile
+-- User Profile (كما في كودك)
 local UserProfile = Instance.new("Frame", LeftSidebar)
 UserProfile.Size = UDim2.new(1, -12, 0, 50)
 UserProfile.Position = UDim2.new(0, 6, 1, -60)
@@ -84,7 +84,7 @@ UserName.Font = Enum.Font.GothamBold
 UserName.TextSize = 11
 UserName.BackgroundTransparency = 1
 
--- Tabs
+-- Tabs Container
 local TabContainer = Instance.new("Frame", LeftSidebar)
 TabContainer.Position = UDim2.new(0, 10, 0, 65)
 TabContainer.Size = UDim2.new(1, -20, 0.55, 0)
@@ -92,6 +92,7 @@ TabContainer.BackgroundTransparency = 1
 local Layout = Instance.new("UIListLayout", TabContainer)
 Layout.Padding = UDim.new(0, 6)
 
+-- Function to handle Pages
 local Pages = {}
 local function CreatePage(name)
     local Page = Instance.new("ScrollingFrame", RightContent)
@@ -99,7 +100,7 @@ local function CreatePage(name)
     Page.Position = UDim2.new(0, 5, 0, 5)
     Page.BackgroundTransparency = 1
     Page.Visible = false
-    Page.ScrollBarThickness = 0
+    Page.ScrollBarThickness = 2
     Pages[name] = Page
     
     local TabBtn = Instance.new("TextButton", TabContainer)
@@ -118,15 +119,15 @@ local function CreatePage(name)
     return Page
 end
 
--- Create Pages
+-- [3] Pages Implementation
 local TER_Page = CreatePage("TER")
 local Mob_Page = CreatePage("Mob")
 local TMop_Page = CreatePage("TMop")
 
--- --- [TER Page Logic] ---
+-- --- TER Page UI ---
 local TerLabel = Instance.new("TextLabel", TER_Page)
 TerLabel.Size = UDim2.new(1, 0, 0, 40)
-TerLabel.Text = "Location: Not Set"
+TerLabel.Text = "Target Location: Not Set"
 TerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TerLabel.BackgroundTransparency = 1
 
@@ -134,112 +135,110 @@ local SelectTerBtn = Instance.new("TextButton", TER_Page)
 SelectTerBtn.Size = UDim2.new(0.9, 0, 0, 40)
 SelectTerBtn.Position = UDim2.new(0.05, 0, 0, 50)
 SelectTerBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-SelectTerBtn.Text = "Select Current Pos"
+SelectTerBtn.Text = "Select Current Location"
 SelectTerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 Instance.new("UICorner", SelectTerBtn)
 
 SelectTerBtn.MouseButton1Click:Connect(function()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        SavedLocation = LocalPlayer.Character.HumanoidRootPart.CFrame
-        local pos = SavedLocation.Position
-        TerLabel.Text = string.format("X: %.0f | Y: %.0f | Z: %.0f", pos.X, pos.Y, pos.Z)
-    end
+    SavedLocation = LocalPlayer.Character.HumanoidRootPart.CFrame
+    local pos = SavedLocation.Position
+    TerLabel.Text = string.format("X: %.2f | Y: %.2f | Z: %.2f", pos.X, pos.Y, pos.Z)
 end)
 
--- --- [Mob Page Logic] ---
-local MobStatus = Instance.new("TextLabel", Mob_Page)
-MobStatus.Size = UDim2.new(1, 0, 0, 40)
-MobStatus.Text = "Current Mob: None"
-MobStatus.TextColor3 = Color3.fromRGB(255, 255, 255)
-MobStatus.BackgroundTransparency = 1
+-- --- Mob Page UI ---
+local MobInput = Instance.new("TextBox", Mob_Page)
+MobInput.Size = UDim2.new(0.9, 0, 0, 40)
+MobInput.Position = UDim2.new(0.05, 0, 0, 10)
+MobInput.PlaceholderText = "Type Mob Name Here..."
+MobInput.Text = ""
+MobInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MobInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", MobInput)
 
-local ToggleSelectionBtn = Instance.new("TextButton", Mob_Page)
-ToggleSelectionBtn.Size = UDim2.new(0.9, 0, 0, 50)
-ToggleSelectionBtn.Position = UDim2.new(0.05, 0, 0, 50)
-ToggleSelectionBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-ToggleSelectionBtn.Text = "Selection Mode: OFF"
-ToggleSelectionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-Instance.new("UICorner", ToggleSelectionBtn)
+local SelectMobBtn = Instance.new("TextButton", Mob_Page)
+SelectMobBtn.Size = UDim2.new(0.9, 0, 0, 40)
+SelectMobBtn.Position = UDim2.new(0.05, 0, 0, 60)
+SelectMobBtn.Text = "Select Mob (Click on Mob)"
+SelectMobBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+SelectMobBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", SelectMobBtn)
 
 local ResearchBtn = Instance.new("TextButton", Mob_Page)
 ResearchBtn.Size = UDim2.new(0.9, 0, 0, 40)
 ResearchBtn.Position = UDim2.new(0.05, 0, 0, 110)
-ResearchBtn.Text = "Research (Reset All)"
-ResearchBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+ResearchBtn.Text = "Research (Clear All)"
+ResearchBtn.BackgroundColor3 = Color3.fromRGB(80, 20, 20)
 ResearchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 Instance.new("UICorner", ResearchBtn)
 
--- تفعيل وضع الاختيار
-ToggleSelectionBtn.MouseButton1Click:Connect(function()
-    SelectionEnabled = not SelectionEnabled
-    if SelectionEnabled then
-        ToggleSelectionBtn.Text = "Selection Mode: ON (Tap a Mob)"
-        ToggleSelectionBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-    else
-        ToggleSelectionBtn.Text = "Selection Mode: OFF"
-        ToggleSelectionBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-    end
-end)
-
--- وظيفة لمس الموب
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    -- "gameProcessed" تضمن أنك لا تضغط على أزرار الواجهة
-    if not gameProcessed and SelectionEnabled and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-        local target = Mouse.Target
-        if target then
-            local model = target:FindFirstAncestorOfClass("Model")
-            if model then
-                SelectedMobName = model.Name
-                MobStatus.Text = "Current Mob: " .. SelectedMobName
-                -- إيقاف الوضع تلقائياً بعد الاختيار
-                SelectionEnabled = false
-                ToggleSelectionBtn.Text = "Selection Mode: OFF"
-                ToggleSelectionBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-            end
-        end
-    end
+SelectMobBtn.MouseButton1Click:Connect(function()
+    SelectionMode = true
+    SelectMobBtn.Text = "CLICK ON THE MOB..."
+    SelectMobBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
 end)
 
 ResearchBtn.MouseButton1Click:Connect(function()
     SelectedMobName = ""
-    MobStatus.Text = "Current Mob: None"
+    MobInput.Text = ""
+    SelectMobBtn.Text = "Select Mob (Click on Mob)"
+    SelectMobBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 end)
 
--- --- [TMop Page Logic] ---
-local BringToggle = Instance.new("TextButton", TMop_Page)
-BringToggle.Size = UDim2.new(0.9, 0, 0, 60)
-BringToggle.Position = UDim2.new(0.05, 0, 0, 20)
-BringToggle.Text = "BRING MOBS: OFF"
-BringToggle.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-BringToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-BringToggle.Font = Enum.Font.GothamBold
-Instance.new("UICorner", BringToggle)
+-- كاشف الضغط على الموبات
+Mouse.Button1Down:Connect(function()
+    if SelectionMode and Mouse.Target then
+        local model = Mouse.Target:FindFirstAncestorOfClass("Model")
+        if model then
+            SelectedMobName = model.Name
+            MobInput.Text = SelectedMobName
+            SelectionMode = false
+            SelectMobBtn.Text = "Selected: " .. SelectedMobName
+            SelectMobBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        end
+    end
+end)
 
-BringToggle.MouseButton1Click:Connect(function()
+-- --- TMop Page UI ---
+local ToggleBtn = Instance.new("TextButton", TMop_Page)
+ToggleBtn.Size = UDim2.new(0.9, 0, 0, 60)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0, 20)
+ToggleBtn.Text = "Bring Mobs: OFF"
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", ToggleBtn)
+
+ToggleBtn.MouseButton1Click:Connect(function()
     BringingMobs = not BringingMobs
-    BringToggle.Text = BringingMobs and "BRING MOBS: ON" or "BRING MOBS: OFF"
-    BringToggle.BackgroundColor3 = BringingMobs and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    if BringingMobs then
+        ToggleBtn.Text = "Bring Mobs: ON"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+    else
+        ToggleBtn.Text = "Bring Mobs: OFF"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+    end
 end)
 
--- [Main Loop] (Teleport & Freeze)
+-- [4] الميكانيكا الأساسية (Teleport & Freeze)
 RunService.Heartbeat:Connect(function()
     if BringingMobs and SavedLocation and SelectedMobName ~= "" then
-        for _, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("Model") and v.Name == SelectedMobName then
-                local hrp = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("UpperTorso")
+        -- البحث عن كل الموبات التي تحمل نفس الاسم
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj.Name == SelectedMobName then
+                local hrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("UpperTorso")
                 if hrp then
+                    -- النقل والتجميد
                     hrp.CFrame = SavedLocation
-                    hrp.Velocity = Vector3.new(0,0,0)
-                    hrp.RotVelocity = Vector3.new(0,0,0)
+                    hrp.Velocity = Vector3.new(0,0,0) -- تصفير السرعة لمنع الارتداد
                 end
             end
         end
     end
 end)
 
--- [Navigation & Draggable]
+-- [5] Minimizing & Dragging (نفس كودك مع تحسين)
 local CloseBtn = Instance.new("TextButton", MainFrame)
-CloseBtn.Text = "X"; CloseBtn.Size = UDim2.new(0,35,0,35); CloseBtn.Position = UDim2.new(1,-40,0,5); CloseBtn.BackgroundTransparency = 1; CloseBtn.TextColor3 = Color3.new(1,1,1); CloseBtn.TextSize = 20
+CloseBtn.Text = "X"; CloseBtn.Size = UDim2.new(0,35,0,35); CloseBtn.Position = UDim2.new(1,-40,0,5); CloseBtn.BackgroundTransparency = 1; CloseBtn.TextColor3 = Color3.new(1,1,1)
 
 local MinimizedBtn = Instance.new("TextButton", ScreenGui)
 MinimizedBtn.Size = UDim2.new(0,55,0,55); MinimizedBtn.Position = UDim2.new(0.05,0,0.4,0); MinimizedBtn.Text = "M"; MinimizedBtn.Visible = false; MinimizedBtn.BackgroundColor3 = Color3.fromRGB(15,15,15)
@@ -248,6 +247,7 @@ Instance.new("UICorner", MinimizedBtn)
 CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false; MinimizedBtn.Visible = true end)
 MinimizedBtn.MouseButton1Click:Connect(function() MainFrame.Visible = true; MinimizedBtn.Visible = false end)
 
+-- Dragging Functionality
 local function MakeDraggable(frame)
     local dragging, dragStart, startPos
     frame.InputBegan:Connect(function(input)
@@ -267,6 +267,7 @@ end
 MakeDraggable(MainFrame)
 MakeDraggable(MinimizedBtn)
 
+-- Start
 ShowWelcome()
 MainFrame.Visible = true
-Pages["TER"].Visible = true
+Pages["TER"].Visible = true -- الصفحة الافتراضية
