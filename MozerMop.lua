@@ -1,4 +1,4 @@
--- Mozer Mob v3.0 (Multi-Selection & Anti-Movement)
+-- Mozer Mob v4.0 (Smart Path Detection & Delta Optimized)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -7,37 +7,39 @@ local Mouse = LocalPlayer:GetMouse()
 
 -- Variables
 local SavedLocation = nil
-local SelectedMobList = {} -- قائمة الوحوش المختارة
-local CurrentlyHoveredMob = nil -- الوحش الذي يتم لمسه حالياً
-local SelectionMode = false
-local BringingEnabled = false
+local SelectedPaths = {} -- تخزين المسارات (Folders) التي تحتوي على الموبات
+local SelectedMobNames = {} -- أسماء الموبات المحددة
+local DetectionActive = false
+local BringingActive = false
+local TempTarget = nil
 
--- Create Highlight Effect (الهالة الحمراء)
+-- Highlight for Selection
 local Highlight = Instance.new("Highlight")
 Highlight.FillColor = Color3.fromRGB(255, 0, 0)
-Highlight.FillTransparency = 0.5
+Highlight.FillTransparency = 0.4
 Highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-Highlight.OutlineTransparency = 0
-Highlight.Parent = nil
 
--- UI Setup
+-- UI Creation
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "MozerMob_V3"
+ScreenGui.Name = "MozerMob_V4"
+ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 480, 0, 320)
-MainFrame.Position = UDim2.new(0.5, -240, 0.5, -160)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-Instance.new("UICorner", MainFrame)
+MainFrame.Size = UDim2.new(0, 460, 0, 320)
+MainFrame.Position = UDim2.new(0.5, -230, 0.5, -160)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+MainFrame.BorderSizePixel = 0
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
 -- Sidebar
 local Sidebar = Instance.new("Frame", MainFrame)
 Sidebar.Size = UDim2.new(0, 120, 1, 0)
-Sidebar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Instance.new("UICorner", Sidebar)
+Sidebar.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 10)
 
-local Layout = Instance.new("UIListLayout", Sidebar)
-Layout.Padding = UDim.new(0, 5)
+local SidebarLayout = Instance.new("UIListLayout", Sidebar)
+SidebarLayout.Padding = UDim.new(0, 5)
+SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 -- Pages Container
 local Pages = Instance.new("Frame", MainFrame)
@@ -45,155 +47,148 @@ Pages.Position = UDim2.new(0, 130, 0, 10)
 Pages.Size = UDim2.new(1, -140, 1, -20)
 Pages.BackgroundTransparency = 1
 
+local PageObjects = {}
 local function CreatePage(name)
     local Page = Instance.new("ScrollingFrame", Pages)
     Page.Size = UDim2.new(1, 0, 1, 0)
     Page.BackgroundTransparency = 1
     Page.Visible = false
     Page.ScrollBarThickness = 2
+    PageObjects[name] = Page
     
     local TabBtn = Instance.new("TextButton", Sidebar)
-    TabBtn.Size = UDim2.new(1, -10, 0, 35)
+    TabBtn.Size = UDim2.new(0.9, 0, 0, 35)
     TabBtn.Text = name
-    TabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    TabBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     TabBtn.TextColor3 = Color3.new(1,1,1)
+    TabBtn.Font = Enum.Font.GothamBold
     Instance.new("UICorner", TabBtn)
     
     TabBtn.MouseButton1Click:Connect(function()
-        for _, p in pairs(Pages:GetChildren()) do if p:IsA("ScrollingFrame") then p.Visible = false end end
+        for _, p in pairs(PageObjects) do p.Visible = false end
         Page.Visible = true
     end)
     return Page
 end
 
-local PageMob = CreatePage("Mob Selection")
-local PageTransfer = CreatePage("Transfer Control")
+local PageTER = CreatePage("TER")
+local PageMob = CreatePage("Mob")
+local PageTMop = CreatePage("TMop")
 
--- --- [MOB PAGE UI] ---
-local MobListLabel = Instance.new("TextLabel", PageMob)
-MobListLabel.Size = UDim2.new(1, 0, 0, 30)
-MobListLabel.Text = "Selected: 0 mobs"
-MobListLabel.TextColor3 = Color3.new(1,1,1)
-MobListLabel.BackgroundTransparency = 1
-
-local DetectBtn = Instance.new("TextButton", PageMob)
-DetectBtn.Size = UDim2.new(1, 0, 0, 40)
-DetectBtn.Position = UDim2.new(0,0,0,40)
-DetectBtn.Text = "Start Detection: OFF"
-DetectBtn.BackgroundColor3 = Color3.fromRGB(100, 30, 30)
-DetectBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", DetectBtn)
-
-local AddBtn = Instance.new("TextButton", PageMob)
-AddBtn.Size = UDim2.new(1, 0, 0, 40)
-AddBtn.Position = UDim2.new(0,0,0,90)
-AddBtn.Text = "Select (Add to List)"
-AddBtn.BackgroundColor3 = Color3.fromRGB(30, 100, 30)
-AddBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", AddBtn)
-
-local ClearBtn = Instance.new("TextButton", PageMob)
-ClearBtn.Size = UDim2.new(1, 0, 0, 30)
-ClearBtn.Position = UDim2.new(0,0,0,140)
-ClearBtn.Text = "Clear List"
-ClearBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-ClearBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", ClearBtn)
-
--- --- [TRANSFER PAGE UI] ---
-local SetPosBtn = Instance.new("TextButton", PageTransfer)
+-- [1] TER PAGE (Position Setup)
+local SetPosBtn = Instance.new("TextButton", PageTER)
 SetPosBtn.Size = UDim2.new(1, 0, 0, 50)
-SetPosBtn.Text = "Save Current Location"
-SetPosBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+SetPosBtn.Text = "STEP 1: Save Location"
+SetPosBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 80)
 SetPosBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", SetPosBtn)
 
-local BringToggle = Instance.new("TextButton", PageTransfer)
-BringToggle.Size = UDim2.new(1, 0, 0, 70)
-BringToggle.Position = UDim2.new(0,0,0,60)
-BringToggle.Text = "BRING MOBS: OFF"
-BringToggle.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-BringToggle.Font = Enum.Font.GothamBold
-BringToggle.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", BringToggle)
-
--- --- [LOGIC] ---
-
--- 1. Detection Mode
-DetectBtn.MouseButton1Click:Connect(function()
-    SelectionMode = not SelectionMode
-    DetectBtn.Text = SelectionMode and "Detection: ON (Tap Mob)" or "Detection: OFF"
-    DetectBtn.BackgroundColor3 = SelectionMode and Color3.fromRGB(30, 150, 30) or Color3.fromRGB(100, 30, 30)
-    if not SelectionMode then Highlight.Parent = nil end
+SetPosBtn.MouseButton1Click:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        SavedLocation = LocalPlayer.Character.HumanoidRootPart.CFrame
+        SetPosBtn.Text = "Location Saved! ✔️"
+        task.delay(1, function() SetPosBtn.Text = "STEP 1: Save Location" end)
+    end
 end)
 
--- 2. Mouse/Touch Detection (Anti-Click UI Passthrough)
+-- [2] MOB PAGE (Path Detection Logic)
+local InfoLabel = Instance.new("TextLabel", PageMob)
+InfoLabel.Size = UDim2.new(1, 0, 0, 40)
+InfoLabel.Text = "Select a Mob to Auto-Detect Path"
+InfoLabel.TextColor3 = Color3.new(0.7, 0.7, 0.7)
+InfoLabel.BackgroundTransparency = 1
+InfoLabel.TextWrapped = true
+
+local DetectBtn = Instance.new("TextButton", PageMob)
+DetectBtn.Size = UDim2.new(1, 0, 0, 45)
+DetectBtn.Position = UDim2.new(0, 0, 0, 50)
+DetectBtn.Text = "Detection: OFF"
+DetectBtn.BackgroundColor3 = Color3.fromRGB(80, 40, 40)
+DetectBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", DetectBtn)
+
+local AddMobBtn = Instance.new("TextButton", PageMob)
+AddMobBtn.Size = UDim2.new(1, 0, 0, 45)
+AddMobBtn.Position = UDim2.new(0, 0, 0, 105)
+AddMobBtn.Text = "SELECT & SAVE PATH"
+AddMobBtn.BackgroundColor3 = Color3.fromRGB(40, 80, 40)
+AddMobBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", AddMobBtn)
+
+DetectBtn.MouseButton1Click:Connect(function()
+    DetectionActive = not DetectionActive
+    DetectBtn.Text = DetectionActive and "Detection: ON (Touch Mob)" or "Detection: OFF"
+    DetectBtn.BackgroundColor3 = DetectionActive and Color3.fromRGB(40, 120, 40) or Color3.fromRGB(80, 40, 40)
+    if not DetectionActive then Highlight.Parent = nil end
+end)
+
 UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end -- يمنع الاختيار إذا ضغطت على زر
-    if SelectionMode and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+    if processed or not DetectionActive then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         local target = Mouse.Target
         if target then
             local model = target:FindFirstAncestorOfClass("Model")
             if model and model:FindFirstChildOfClass("Humanoid") then
-                CurrentlyHoveredMob = model
-                Highlight.Parent = model -- تفعيل الهالة الحمراء
+                TempTarget = model
+                Highlight.Parent = model
+                InfoLabel.Text = "Target: " .. model.Name .. "\nPath: " .. model.Parent.Name
             end
         end
     end
 end)
 
--- 3. Add to List
-AddBtn.MouseButton1Click:Connect(function()
-    if CurrentlyHoveredMob then
-        local name = CurrentlyHoveredMob.Name
-        if not table.find(SelectedMobList, name) then
-            table.insert(SelectedMobList, name)
-            MobListLabel.Text = "Selected: " .. #SelectedMobList .. " mobs"
-            print("Added: " .. name)
+AddMobBtn.MouseButton1Click:Connect(function()
+    if TempTarget then
+        -- حفظ اسم الموب وحفظ "المجلد" الذي يحتوي عليه
+        if not table.find(SelectedMobNames, TempTarget.Name) then
+            table.insert(SelectedMobNames, TempTarget.Name)
         end
+        if not table.find(SelectedPaths, TempTarget.Parent) then
+            table.insert(SelectedPaths, TempTarget.Parent)
+        end
+        InfoLabel.Text = "Path Added Successfully! (" .. #SelectedPaths .. " Paths)"
+        Highlight.Parent = nil
+        TempTarget = nil
     end
 end)
 
--- 4. Clear List
-ClearBtn.MouseButton1Click:Connect(function()
-    SelectedMobList = {}
-    MobListLabel.Text = "Selected: 0 mobs"
-    Highlight.Parent = nil
-    CurrentlyHoveredMob = nil
-end)
+-- [3] TMop PAGE (Bringing & Freezing)
+local BringBtn = Instance.new("TextButton", PageTMop)
+BringBtn.Size = UDim2.new(1, 0, 0, 80)
+BringBtn.Text = "START BRINGING: OFF"
+BringBtn.BackgroundColor3 = Color3.fromRGB(120, 0, 0)
+BringBtn.TextColor3 = Color3.new(1,1,1)
+BringBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", BringBtn)
 
--- 5. Save Location
-SetPosBtn.MouseButton1Click:Connect(function()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        SavedLocation = LocalPlayer.Character.HumanoidRootPart.CFrame
-        SetPosBtn.Text = "Location Saved! ✔️"
+BringBtn.MouseButton1Click:Connect(function()
+    if not SavedLocation then
+        BringBtn.Text = "SAVE LOCATION FIRST!"
         task.wait(1)
-        SetPosBtn.Text = "Save Current Location"
+        BringBtn.Text = "START BRINGING: OFF"
+        return
     end
+    BringingActive = not BringingActive
+    BringBtn.Text = BringingActive and "BRINGING: ON" or "BRINGING: OFF"
+    BringBtn.BackgroundColor3 = BringingActive and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(120, 0, 0)
 end)
 
--- 6. Bring & Freeze Loop
-BringToggle.MouseButton1Click:Connect(function()
-    BringingEnabled = not BringingEnabled
-    BringToggle.Text = BringingEnabled and "BRING MOBS: ON" or "BRING MOBS: OFF"
-    BringToggle.BackgroundColor3 = BringingEnabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(150, 0, 0)
-end)
-
+-- Main Loop (The Brain)
 RunService.Heartbeat:Connect(function()
-    if BringingEnabled and SavedLocation and #SelectedMobList > 0 then
-        for _, obj in pairs(workspace:GetChildren()) do
-            if table.find(SelectedMobList, obj.Name) and obj:IsA("Model") then
-                local hrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("UpperTorso")
-                if hrp then
-                    -- نقل فوري
-                    hrp.CFrame = SavedLocation
-                    -- منع الحركة (تجميد)
-                    hrp.Velocity = Vector3.new(0,0,0)
-                    hrp.RotVelocity = Vector3.new(0,0,0)
-                    -- منع الجاذبية من إسقاطهم
-                    for _, part in pairs(obj:GetChildren()) do
-                        if part:IsA("BasePart") then
-                            part.Velocity = Vector3.new(0,0,0)
+    if BringingActive and SavedLocation then
+        -- البحث داخل المسارات التي تم حفظها تلقائياً
+        for _, parent in pairs(SelectedPaths) do
+            for _, mob in pairs(parent:GetChildren()) do
+                if mob:IsA("Model") and table.find(SelectedMobNames, mob.Name) then
+                    local hrp = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChild("UpperTorso")
+                    if hrp then
+                        -- النقل مع الحفاظ على زاوية الوجه
+                        hrp.CFrame = SavedLocation
+                        -- التجميد التام
+                        hrp.Velocity = Vector3.new(0,0,0)
+                        hrp.RotVelocity = Vector3.new(0,0,0)
+                        for _, p in pairs(mob:GetChildren()) do
+                            if p:IsA("BasePart") then p.Velocity = Vector3.new(0,0,0) end
                         end
                     end
                 end
@@ -202,14 +197,34 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Make Draggable
-local function MakeDraggable(f)
-    local d, s, sp
-    f.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then d = true s = i.Position sp = f.Position end end)
-    UserInputService.InputChanged:Connect(function(i) if d and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then local delta = i.Position - s f.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y) end end)
-    f.InputEnded:Connect(function(i) d = false end)
+-- Dragging Functionality (Move UI)
+local function MakeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    frame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
 end
-MakeDraggable(MainFrame)
 
-PageMob.Visible = true
-print("Mozer Mob V3 Loaded!")
+MakeDraggable(MainFrame)
+PageTER.Visible = true
+print("Mozer Mob V4 Loaded - Path Detection Active")
